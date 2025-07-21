@@ -5,7 +5,8 @@ from anime_recommendation_system import EnhancedAnimeRecommendationSystem
 # Load your system
 @st.cache_resource
 def load_system():
-    system = EnhancedAnimeRecommendationSystem("D:/AI assignment/anime.csv")  # Use the correct path
+    system = EnhancedAnimeRecommendationSystem("D:\AI assignment\anime_cleaned.csv")  
+    # Use the correct path
     system.build_enhanced_content_recommender()
     system.build_optimal_clustering_model()
     system.build_ensemble_classifier()

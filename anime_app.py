@@ -60,12 +60,36 @@ st.markdown("""
         padding: 0.5rem 1rem;
     }
     .recommendation-card {
-        background-color: #ffffff;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);  /* Light gradient instead of pure white */
+        border: 1px solid #dee2e6;  /* Add subtle border */
         padding: 1rem;
         border-radius: 0.5rem;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);  /* Enhanced shadow */
         margin-bottom: 1rem;
+        transition: transform 0.2s ease-in-out;  /* Add hover effect */
     }
+    .recommendation-card:hover {
+        transform: translateY(-2px);  /* Lift effect on hover */
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    
+    /* Alternative dark theme option - uncomment if you prefer dark cards */
+    /*
+    .recommendation-card {
+        background: linear-gradient(135deg, #2d3748 0%, #4a5568 100%);
+        color: white;
+        border: 1px solid #4a5568;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        margin-bottom: 1rem;
+        transition: transform 0.2s ease-in-out;
+    }
+    .recommendation-card:hover {
+        transform: translateY(-2px);
+        box-shadow: blue;
+    }
+    */
 </style>
 """, unsafe_allow_html=True)
 
