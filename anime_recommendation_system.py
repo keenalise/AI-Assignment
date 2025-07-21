@@ -391,15 +391,15 @@ class AnimeRecommendationSystem:
         print("\nWelcome! This system provides anime recommendations using AI techniques.")
         print("Available options:")
         print("1. Get content-based recommendations")
-        print("2. Get cluster-based recommendations") 
-        print("3. Predict rating category for new anime")
-        print("4. View anime statistics")
-        print("5. Search anime by genre")
-        print("6. Exit")
+        # print("2. Get cluster-based recommendations") 
+        print("2. Predict rating category for new anime")
+        print("3. View anime statistics")
+        # print("5. Search anime by genre")
+        print("4. Exit")
         
         while True:
             try:
-                choice = input("\nEnter your choice (1-6): ").strip()
+                choice = input("\nEnter your choice (1-4): ").strip()
                 
                 if choice == '1':
                     anime_name = input("Enter anime name: ").strip()
@@ -412,18 +412,9 @@ class AnimeRecommendationSystem:
                     else:
                         print(recommendations)
                 
-                elif choice == '2':
-                    anime_name = input("Enter anime name: ").strip()
-                    num_recs = int(input("Number of recommendations (default 10): ") or "10")
-                    
-                    print(f"\nCluster-based recommendations for '{anime_name}':")
-                    recommendations = self.get_cluster_recommendations(anime_name, num_recs)
-                    if isinstance(recommendations, pd.DataFrame):
-                        print(recommendations.to_string(index=False))
-                    else:
-                        print(recommendations)
+            
                 
-                elif choice == '3':
+                elif choice == '2':
                     episodes = int(input("Enter number of episodes: "))
                     members = int(input("Enter number of members: "))
                     genre_count = int(input("Enter number of genres: "))
@@ -438,7 +429,7 @@ class AnimeRecommendationSystem:
                     else:
                         print(prediction)
                 
-                elif choice == '4':
+                elif choice == '3':
                     print("\nAnime Dataset Statistics:")
                     print(f"Total animes: {len(self.processed_data)}")
                     print(f"Average rating: {self.processed_data['rating'].mean():.2f}")
@@ -446,24 +437,14 @@ class AnimeRecommendationSystem:
                     print(f"Average episodes: {self.processed_data['episodes'].mean():.1f}")
                     print(f"Total members: {self.processed_data['members'].sum():,.0f}")
                 
-                elif choice == '5':
-                    genre_input = input("Enter genre to search: ").strip()
-                    genre_animes = self.processed_data[
-                        self.processed_data['genre'].str.contains(genre_input, case=False, na=False)
-                    ].nlargest(10, 'rating')[['name', 'genre', 'rating', 'type', 'episodes']]
-                    
-                    if not genre_animes.empty:
-                        print(f"\nTop animes in '{genre_input}' genre:")
-                        print(genre_animes.to_string(index=False))
-                    else:
-                        print(f"No animes found for genre '{genre_input}'")
+             
                 
-                elif choice == '6':
+                elif choice == '4':
                     print("Thank you for using the Anime Recommendation System!")
                     break
                 
                 else:
-                    print("Invalid choice. Please enter a number between 1-6.")
+                    print("Invalid choice. Please enter a number between 1-4.")
                     
             except KeyboardInterrupt:
                 print("\n\nExiting... Thank you for using the system!")
