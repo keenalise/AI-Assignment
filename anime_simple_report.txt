@@ -1,0 +1,60 @@
+============================================================
+🎌 ANIME RECOMMENDATION SYSTEM - ANALYSIS REPORT
+============================================================
+
+📊 DATASET SUMMARY
+------------------------------
+Total Anime Entries: 12,294
+After Processing: 12,292
+Average Rating: 6.49
+Rating Range: 4.0 - 9.1
+Total Members: 77,130,340.5
+
+🎭 ANIME TYPE DISTRIBUTION
+------------------------------
+TV          :  3,812 (31.0%)
+OVA         :  3,311 (26.9%)
+Movie       :  2,346 (19.1%)
+Special     :  1,676 (13.6%)
+ONA         :    659 ( 5.4%)
+Music       :    488 ( 4.0%)
+
+🎨 TOP GENRES
+------------------------------
+Comedy         : 4,644 (37.8%)
+Action         : 2,844 (23.1%)
+Adventure      : 2,347 (19.1%)
+Fantasy        : 2,308 (18.8%)
+Sci-Fi         : 2,070 (16.8%)
+Drama          : 2,015 (16.4%)
+Shounen        : 1,712 (13.9%)
+Kids           : 1,609 (13.1%)
+Romance        : 1,464 (11.9%)
+Slice of Life  : 1,220 ( 9.9%)
+
+⭐ QUALITY ANALYSIS
+------------------------------
+High-rated anime (8.0+): 649 (5.3%)
+Average rating of high-rated: 8.31
+Average members for high-rated: 18,183
+
+🏆 TOP 10 HIGHEST RATED ANIME
+------------------------------
+9.12 - Kimi no Na wa.                           (Movie)
+9.12 - Fullmetal Alchemist: Brotherhood         (TV)
+9.12 - Gintama°                                 (TV)
+9.12 - Steins;Gate                              (TV)
+9.12 - Gintama&#039;                            (TV)
+9.12 - Haikyuu!!: Karasuno Koukou VS Shiratoriz (TV)
+9.12 - Hunter x Hunter (2011)                   (TV)
+9.12 - Kahei no Umi                             (Movie)
+9.12 - Mogura no Motoro                         (Movie)
+9.12 - Spoon-hime no Swing Kitchen              (TV)
+
+🔧 SYSTEM INFORMATION
+------------------------------
+Recommendation system: Available
+Content recommender: Built
+Clustering model: Built
+
+============================================================

@@ -7,20 +7,16 @@ import plotly.express as px
 import plotly.graph_objects as go
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
-from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import (accuracy_score, precision_score, recall_score, f1_score, 
-                           classification_report, confusion_matrix, silhouette_score)
+from sklearn.metrics import silhouette_score
 import warnings
 warnings.filterwarnings('ignore')
 
 # Set page config
 st.set_page_config(
-    page_title="🎌 Enhanced Anime Recommendation System",
+    page_title="🎌 Anime Recommendation System",
     page_icon="🎌",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -36,13 +32,6 @@ st.markdown("""
         color: #FF6B6B;
         margin-bottom: 2rem;
         text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
-    }
-    .feature-card {
-        background-color: #f8f9fa;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        border-left: 4px solid #FF6B6B;
-        margin-bottom: 1rem;
     }
     .metric-card {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -60,42 +49,32 @@ st.markdown("""
         padding: 0.5rem 1rem;
     }
     .recommendation-card {
-        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);  /* Light gradient instead of pure white */
-        border: 1px solid #dee2e6;  /* Add subtle border */
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border: 1px solid #dee2e6;
         padding: 1rem;
         border-radius: 0.5rem;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);  /* Enhanced shadow */
-        margin-bottom: 1rem;
-        transition: transform 0.2s ease-in-out;  /* Add hover effect */
-    }
-    .recommendation-card:hover {
-        transform: translateY(-2px);  /* Lift effect on hover */
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    }
-    
-    /* Alternative dark theme option - uncomment if you prefer dark cards */
-    /*
-    .recommendation-card {
-        background: linear-gradient(135deg, #2d3748 0%, #4a5568 100%);
-        color: white;
-        border: 1px solid #4a5568;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         margin-bottom: 1rem;
         transition: transform 0.2s ease-in-out;
     }
     .recommendation-card:hover {
         transform: translateY(-2px);
-        box-shadow: blue;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     }
-    */
+    .cluster-card {
+        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+        border: 1px solid #90caf9;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        margin-bottom: 1rem;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 class StreamlitAnimeRecommendationSystem:
     """
-    Enhanced Anime Recommendation System with Streamlit GUI
+    Streamlined Anime Recommendation System with Streamlit GUI
+    Matches the functionality of the command-line version
     """
     
     def __init__(self):
@@ -105,10 +84,7 @@ class StreamlitAnimeRecommendationSystem:
         self.tfidf_matrix = None
         self.cosine_sim = None
         self.scaler = StandardScaler()
-        self.label_encoders = {}
         self.kmeans = None
-        self.best_classifier = None
-        self.model_scores = {}
     
     @st.cache_data
     def load_and_preprocess_data(_self, file_path=None, uploaded_file=None):
@@ -122,149 +98,194 @@ class StreamlitAnimeRecommendationSystem:
                 st.error("No data source provided")
                 return False
             
-            st.success(f"✅ Dataset loaded successfully: {len(_self.data):,} records")
+            st.success(f"✅ Dataset loaded: {len(_self.data):,} records")
+            
+            # Display basic dataset info
+            _self._display_dataset_info()
             
             # Create processed data
             _self.processed_data = _self.data.copy()
             _self._clean_data()
             _self._engineer_features()
             _self._handle_outliers()
-            _self._create_target_variables()
             
+            st.success(f"✅ Preprocessing completed. Final shape: {_self.processed_data.shape}")
             return True
             
         except Exception as e:
             st.error(f"❌ Error loading data: {str(e)}")
             return False
     
+    def _display_dataset_info(self):
+        """Display essential dataset information"""
+        st.info(f"📊 Dataset Overview: Shape {self.data.shape}, Memory: {self.data.memory_usage(deep=True).sum() / 1024**2:.1f} MB")
+        
+        # Show missing values for key columns
+        key_columns = ['name', 'genre', 'rating', 'episodes', 'members']
+        missing_data = self.data[key_columns].isnull().sum()
+        if missing_data.sum() > 0:
+            missing_info = []
+            for col, missing in missing_data[missing_data > 0].items():
+                missing_info.append(f"{col}: {missing:,} ({missing/len(self.data)*100:.1f}%)")
+            if missing_info:
+                st.warning(f"🔍 Missing Values: {', '.join(missing_info)}")
+    
     def _clean_data(self):
-        """Enhanced data cleaning"""
-        # Handle missing values
-        self.processed_data['genre'] = self.processed_data['genre'].fillna('Unknown')
-        self.processed_data['type'] = self.processed_data['type'].fillna('TV')
+        """Enhanced data cleaning with intelligent missing value handling"""
+        with st.spinner("🧹 Cleaning data..."):
+            # Handle missing values strategically
+            self.processed_data['genre'] = self.processed_data['genre'].fillna('Unknown')
+            self.processed_data['type'] = self.processed_data['type'].fillna('TV')
+            
+            # Convert episodes to numeric and handle missing values
+            self.processed_data['episodes'] = pd.to_numeric(
+                self.processed_data['episodes'], errors='coerce'
+            )
+            
+            # Fill missing episodes based on anime type
+            type_medians = self.processed_data.groupby('type')['episodes'].median()
+            for anime_type, median_eps in type_medians.items():
+                mask = (self.processed_data['type'] == anime_type) & \
+                       (self.processed_data['episodes'].isna())
+                self.processed_data.loc[mask, 'episodes'] = median_eps
+            
+            # Handle remaining missing values
+            self.processed_data['episodes'] = self.processed_data['episodes'].fillna(1)
+            
+            # Smart rating imputation
+            self._impute_ratings()
+            
+            # Fill missing members with median
+            self.processed_data['members'] = self.processed_data['members'].fillna(
+                self.processed_data['members'].median()
+            )
+            
+            # Remove duplicates and invalid records
+            initial_count = len(self.processed_data)
+            self.processed_data = self.processed_data.drop_duplicates(subset=['name'])
+            self.processed_data = self.processed_data[self.processed_data['rating'] > 0]
+            
+            cleaned_count = initial_count - len(self.processed_data)
+            if cleaned_count > 0:
+                st.info(f"   Cleaned {cleaned_count:,} invalid records")
+    
+    def _impute_ratings(self):
+        """Intelligent rating imputation using similar anime characteristics"""
+        missing_ratings = self.processed_data['rating'].isna()
         
-        # Convert episodes to numeric
-        self.processed_data['episodes'] = pd.to_numeric(
-            self.processed_data['episodes'], errors='coerce'
-        )
-        
-        # Fill missing episodes based on type
-        type_episode_median = self.processed_data.groupby('type')['episodes'].median()
-        for anime_type, median_episodes in type_episode_median.items():
-            mask = (self.processed_data['type'] == anime_type) & \
-                   (self.processed_data['episodes'].isna())
-            self.processed_data.loc[mask, 'episodes'] = median_episodes
-        
-        self.processed_data['episodes'] = self.processed_data['episodes'].fillna(1)
-        
-        # Handle ratings and members
-        self.processed_data['rating'] = self.processed_data['rating'].fillna(
-            self.processed_data['rating'].median()
-        )
-        self.processed_data['members'] = self.processed_data['members'].fillna(
-            self.processed_data['members'].median()
-        )
-        
-        # Remove duplicates and invalid records
-        initial_count = len(self.processed_data)
-        self.processed_data = self.processed_data.drop_duplicates(subset=['name'])
-        self.processed_data = self.processed_data[self.processed_data['rating'] > 0]
+        if missing_ratings.sum() > 0:
+            st.info(f"   Imputing {missing_ratings.sum()} missing ratings...")
+            
+            for idx in self.processed_data[missing_ratings].index:
+                # Find similar anime based on genre and type
+                current_genre = self.processed_data.loc[idx, 'genre']
+                current_type = self.processed_data.loc[idx, 'type']
+                
+                similar_anime = self.processed_data[
+                    (self.processed_data['genre'] == current_genre) &
+                    (self.processed_data['type'] == current_type) &
+                    (~self.processed_data['rating'].isna())
+                ]
+                
+                if len(similar_anime) > 0:
+                    # Weighted average by member count
+                    weights = similar_anime['members'] / similar_anime['members'].sum()
+                    imputed_rating = (similar_anime['rating'] * weights).sum()
+                    self.processed_data.loc[idx, 'rating'] = imputed_rating
+                else:
+                    # Fallback to overall median
+                    self.processed_data.loc[idx, 'rating'] = self.processed_data['rating'].median()
     
     def _engineer_features(self):
-        """Advanced feature engineering"""
-        # Basic derived features
-        self.processed_data['genre_count'] = self.processed_data['genre'].apply(
-            lambda x: len(str(x).split(', ')) if pd.notna(x) else 0
-        )
-        
-        # Popularity and engagement metrics
-        self.processed_data['popularity_score'] = (
-            self.processed_data['members'] * self.processed_data['rating']
-        )
-        self.processed_data['log_members'] = np.log1p(self.processed_data['members'])
-        self.processed_data['log_episodes'] = np.log1p(self.processed_data['episodes'])
-        
-        # Episode-based features
-        self.processed_data['is_movie'] = (self.processed_data['type'] == 'Movie').astype(int)
-        self.processed_data['is_long_series'] = (self.processed_data['episodes'] > 24).astype(int)
-        self.processed_data['is_short_series'] = (self.processed_data['episodes'] <= 12).astype(int)
-        
-        # Rating-based features
-        self.processed_data['high_rated'] = (self.processed_data['rating'] >= 8.0).astype(int)
-        self.processed_data['rating_members_ratio'] = (
-            self.processed_data['rating'] / np.log1p(self.processed_data['members'])
-        )
-        
-        # Genre-based features
-        popular_genres = ['Comedy', 'Action', 'Drama', 'Romance', 'Fantasy', 'School', 'Supernatural']
-        for genre in popular_genres:
-            self.processed_data[f'genre_{genre.lower()}'] = self.processed_data['genre'].apply(
-                lambda x: 1 if genre in str(x) else 0
+        """Create enhanced features for better recommendations"""
+        with st.spinner("⚙️ Engineering features..."):
+            # Basic derived features
+            self.processed_data['genre_count'] = self.processed_data['genre'].apply(
+                lambda x: len(str(x).split(', ')) if pd.notna(x) else 0
             )
+            
+            # Popularity and engagement metrics
+            self.processed_data['popularity_score'] = (
+                self.processed_data['members'] * self.processed_data['rating']
+            )
+            self.processed_data['log_members'] = np.log1p(self.processed_data['members'])
+            self.processed_data['log_episodes'] = np.log1p(self.processed_data['episodes'])
+            
+            # Categorical features
+            self.processed_data['is_movie'] = (self.processed_data['type'] == 'Movie').astype(int)
+            self.processed_data['is_long_series'] = (self.processed_data['episodes'] > 24).astype(int)
+            self.processed_data['high_rated'] = (self.processed_data['rating'] >= 8.0).astype(int)
+            
+            # Genre indicators for popular genres
+            popular_genres = ['Comedy', 'Action', 'Drama', 'Romance', 'Fantasy']
+            for genre in popular_genres:
+                self.processed_data[f'has_{genre.lower()}'] = self.processed_data['genre'].apply(
+                    lambda x: 1 if genre in str(x) else 0
+                )
+            
+            new_features = len(self.processed_data.columns) - len(self.data.columns)
+            st.info(f"   Created {new_features} new features")
     
     def _handle_outliers(self):
-        """Handle outliers using IQR method"""
-        numerical_columns = ['rating', 'episodes', 'members']
-        
-        for col in numerical_columns:
-            Q1 = self.processed_data[col].quantile(0.25)
-            Q3 = self.processed_data[col].quantile(0.75)
-            IQR = Q3 - Q1
+        """Handle outliers using IQR capping method"""
+        with st.spinner("🎯 Handling outliers..."):
+            numerical_columns = ['rating', 'episodes', 'members']
+            outliers_capped = 0
             
-            lower_bound = Q1 - 1.5 * IQR
-            upper_bound = Q3 + 1.5 * IQR
+            for col in numerical_columns:
+                Q1 = self.processed_data[col].quantile(0.25)
+                Q3 = self.processed_data[col].quantile(0.75)
+                IQR = Q3 - Q1
+                
+                lower_bound = Q1 - 1.5 * IQR
+                upper_bound = Q3 + 1.5 * IQR
+                
+                # Count outliers before capping
+                outliers = ((self.processed_data[col] < lower_bound) | 
+                           (self.processed_data[col] > upper_bound)).sum()
+                outliers_capped += outliers
+                
+                # Cap outliers
+                self.processed_data[col] = self.processed_data[col].clip(
+                    lower=max(lower_bound, self.processed_data[col].min()),
+                    upper=upper_bound
+                )
             
-            self.processed_data[col] = self.processed_data[col].clip(
-                lower=max(lower_bound, self.processed_data[col].min()),
-                upper=upper_bound
-            )
-    
-    def _create_target_variables(self):
-        """Create target variables for classification"""
-        self.processed_data['rating_category'] = pd.cut(
-            self.processed_data['rating'], 
-            bins=[0, 5.5, 6.5, 7.5, 8.5, 10], 
-            labels=['Poor', 'Below_Average', 'Average', 'Good', 'Excellent'],
-            include_lowest=True
-        )
-        
-        self.processed_data['is_highly_rated'] = (self.processed_data['rating'] >= 8.0).astype(int)
-        
-        self.processed_data['popularity_category'] = pd.qcut(
-            self.processed_data['members'], 
-            q=5, 
-            labels=['Very_Low', 'Low', 'Medium', 'High', 'Very_High']
-        )
+            if outliers_capped > 0:
+                st.info(f"   Capped {outliers_capped} outlier values")
     
     def build_content_recommender(self):
-        """Build content-based recommendation system"""
-        # Create comprehensive feature text
-        self.processed_data['enhanced_features'] = (
-            self.processed_data['genre'].astype(str) + ' ' + 
-            self.processed_data['type'].astype(str) + ' ' +
-            pd.cut(self.processed_data['episodes'], 
-                  bins=[0, 1, 12, 24, 50, float('inf')], 
-                  labels=['Movie', 'Short', 'Standard', 'Long', 'Very_Long']).astype(str)
-        )
-        
-        # TF-IDF Vectorization
-        self.tfidf_vectorizer = TfidfVectorizer(
-            stop_words='english',
-            max_features=5000,
-            ngram_range=(1, 2),
-            min_df=2,
-            max_df=0.95
-        )
-        
-        self.tfidf_matrix = self.tfidf_vectorizer.fit_transform(
-            self.processed_data['enhanced_features']
-        )
-        
-        # Compute cosine similarity
-        self.cosine_sim = cosine_similarity(self.tfidf_matrix, dense_output=False)
+        """Build content-based recommendation system using TF-IDF"""
+        with st.spinner("🔧 Building content-based recommender..."):
+            # Create comprehensive feature text
+            self.processed_data['content_features'] = (
+                self.processed_data['genre'].astype(str) + ' ' + 
+                self.processed_data['type'].astype(str) + ' ' +
+                pd.cut(self.processed_data['episodes'], 
+                      bins=[0, 1, 12, 24, 50, float('inf')], 
+                      labels=['Movie', 'Short', 'Standard', 'Long', 'Extended']).astype(str)
+            )
+            
+            # Initialize and fit TF-IDF vectorizer
+            self.tfidf_vectorizer = TfidfVectorizer(
+                stop_words='english',
+                max_features=5000,
+                ngram_range=(1, 2),
+                min_df=2,
+                max_df=0.9
+            )
+            
+            self.tfidf_matrix = self.tfidf_vectorizer.fit_transform(
+                self.processed_data['content_features']
+            )
+            
+            # Compute cosine similarity matrix
+            self.cosine_sim = cosine_similarity(self.tfidf_matrix)
+            
+            st.success(f"✅ Content recommender built (Matrix: {self.tfidf_matrix.shape})")
     
     def get_recommendations(self, anime_name, num_recommendations=10):
-        """Get hybrid recommendations"""
+        """Get hybrid recommendations for a given anime"""
         try:
             # Find anime with fuzzy matching
             anime_matches = self.processed_data[
@@ -272,128 +293,111 @@ class StreamlitAnimeRecommendationSystem:
             ]
             
             if len(anime_matches) == 0:
-                return None, f"❌ Anime '{anime_name}' not found"
+                return None, f"❌ Anime '{anime_name}' not found. Please check the spelling."
             
+            # Use the first match
             idx = anime_matches.index[0]
             matched_anime = anime_matches.iloc[0]
             
             # Get similarity scores
-            sim_scores = list(enumerate(self.cosine_sim[idx].toarray()[0]))
+            sim_scores = list(enumerate(self.cosine_sim[idx]))
             sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
             
-            # Get recommendations
-            candidate_indices = [i[0] for i in sim_scores[1:num_recommendations*2]]
-            candidates = self.processed_data.iloc[candidate_indices].copy()
+            # Get top similar anime (excluding the input anime)
+            similar_indices = [i[0] for i in sim_scores[1:num_recommendations*2]]
+            candidates = self.processed_data.iloc[similar_indices].copy()
             
             # Add similarity scores
-            candidates['similarity'] = [sim_scores[i+1][1] for i in range(len(candidates))]
+            candidates['similarity_score'] = [sim_scores[i+1][1] for i in range(len(candidates))]
             
-            # Sort and return top recommendations
-            recommendations = candidates.nlargest(num_recommendations, 'similarity')[
-                ['name', 'genre', 'rating', 'type', 'episodes', 'members', 'similarity']
-            ]
+            # Calculate hybrid score (similarity + rating quality)
+            candidates['rating_normalized'] = (
+                (candidates['rating'] - candidates['rating'].min()) / 
+                (candidates['rating'].max() - candidates['rating'].min())
+            )
+            
+            candidates['hybrid_score'] = (
+                0.7 * candidates['similarity_score'] + 
+                0.3 * candidates['rating_normalized']
+            )
+            
+            # Get final recommendations
+            recommendations = candidates.nlargest(num_recommendations, 'hybrid_score')[
+                ['name', 'genre', 'rating', 'type', 'episodes', 'members', 'similarity_score']
+            ].round({'rating': 2, 'similarity_score': 3})
             
             return recommendations, matched_anime
             
         except Exception as e:
-            return None, f"❌ Error: {str(e)}"
+            return None, f"❌ Error generating recommendations: {str(e)}"
     
     def build_clustering_model(self):
-        """Build clustering model"""
-        clustering_features = [
-            'rating', 'log_episodes', 'log_members', 'genre_count', 
-            'popularity_score', 'is_movie', 'is_long_series', 'high_rated'
-        ]
-        
-        X_cluster = self.processed_data[clustering_features].dropna()
-        X_scaled = self.scaler.fit_transform(X_cluster)
-        
-        # Find optimal k using silhouette score
-        silhouette_scores = []
-        k_range = range(2, 11)
-        
-        for k in k_range:
-            kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
-            cluster_labels = kmeans.fit_predict(X_scaled)
-            silhouette_avg = silhouette_score(X_scaled, cluster_labels)
-            silhouette_scores.append(silhouette_avg)
-        
-        optimal_k = k_range[np.argmax(silhouette_scores)]
-        
-        # Build final model
-        self.kmeans = KMeans(n_clusters=optimal_k, random_state=42, n_init=10)
-        clusters = self.kmeans.fit_predict(X_scaled)
-        
-        self.processed_data.loc[X_cluster.index, 'cluster'] = clusters
-        
-        return optimal_k, max(silhouette_scores)
+        """Build clustering model to group similar anime"""
+        with st.spinner("🔧 Building clustering model..."):
+            # Select features for clustering
+            clustering_features = [
+                'rating', 'log_episodes', 'log_members', 'genre_count',
+                'popularity_score', 'is_movie', 'is_long_series', 'high_rated'
+            ]
+            
+            X_cluster = self.processed_data[clustering_features].dropna()
+            X_scaled = self.scaler.fit_transform(X_cluster)
+            
+            # Find optimal number of clusters
+            silhouette_scores = []
+            k_range = range(3, 11)
+            
+            for k in k_range:
+                kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+                cluster_labels = kmeans.fit_predict(X_scaled)
+                silhouette_avg = silhouette_score(X_scaled, cluster_labels)
+                silhouette_scores.append(silhouette_avg)
+            
+            # Select optimal k
+            optimal_k = k_range[np.argmax(silhouette_scores)]
+            best_score = max(silhouette_scores)
+            
+            # Build final clustering model
+            self.kmeans = KMeans(n_clusters=optimal_k, random_state=42, n_init=10)
+            clusters = self.kmeans.fit_predict(X_scaled)
+            
+            # Add cluster labels to data
+            self.processed_data.loc[X_cluster.index, 'cluster'] = clusters
+            
+            # Store cluster analysis results
+            self.cluster_analysis = self._analyze_clusters(optimal_k)
+            
+            st.success(f"✅ Clustering completed with {optimal_k} clusters (Silhouette: {best_score:.3f})")
+            return optimal_k, best_score
     
-    def build_classification_model(self):
-        """Build classification model"""
-        feature_columns = [
-            'episodes', 'log_members', 'genre_count', 'popularity_score',
-            'is_movie', 'is_long_series', 'is_short_series', 'rating_members_ratio',
-            'genre_comedy', 'genre_action', 'genre_drama', 'genre_romance'
-        ]
+    def _analyze_clusters(self, n_clusters):
+        """Analyze and describe each cluster"""
+        cluster_info = {}
         
-        X = self.processed_data[feature_columns].dropna()
-        y = self.processed_data.loc[X.index, 'rating_category'].dropna()
+        for i in range(n_clusters):
+            cluster_data = self.processed_data[self.processed_data['cluster'] == i]
+            
+            if len(cluster_data) == 0:
+                continue
+            
+            # Get top genres in cluster
+            all_genres = []
+            for genres in cluster_data['genre'].dropna():
+                all_genres.extend([g.strip() for g in str(genres).split(',')])
+            
+            top_genres = []
+            if all_genres:
+                top_genres = pd.Series(all_genres).value_counts().head(3).index.tolist()
+            
+            cluster_info[i] = {
+                'count': len(cluster_data),
+                'avg_rating': cluster_data['rating'].mean(),
+                'avg_episodes': cluster_data['episodes'].mean(),
+                'most_common_type': cluster_data['type'].mode().iloc[0] if len(cluster_data['type'].mode()) > 0 else 'Unknown',
+                'top_genres': top_genres
+            }
         
-        valid_indices = y.dropna().index
-        X = X.loc[valid_indices]
-        y = y.loc[valid_indices]
-        
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=42, stratify=y
-        )
-        
-        # Train Random Forest (simplified for demo)
-        self.best_classifier = RandomForestClassifier(n_estimators=100, random_state=42)
-        self.best_classifier.fit(X_train, y_train)
-        
-        # Evaluate
-        y_pred = self.best_classifier.predict(X_test)
-        f1 = f1_score(y_test, y_pred, average='weighted')
-        
-        return f1
-    
-    def predict_rating_category(self, episodes, members, genre_count, anime_type='TV', genres=''):
-        """Predict rating category for new anime"""
-        if self.best_classifier is None:
-            return None
-        
-        # Engineer features
-        log_members = np.log1p(members)
-        popularity_score = members * 7.0
-        is_movie = 1 if anime_type.lower() == 'movie' else 0
-        is_long_series = 1 if episodes > 24 else 0
-        is_short_series = 1 if episodes <= 12 else 0
-        rating_members_ratio = 7.0 / log_members if log_members > 0 else 0
-        
-        # Genre features
-        genres_lower = genres.lower()
-        genre_comedy = 1 if 'comedy' in genres_lower else 0
-        genre_action = 1 if 'action' in genres_lower else 0
-        genre_drama = 1 if 'drama' in genres_lower else 0
-        genre_romance = 1 if 'romance' in genres_lower else 0
-        
-        # Create feature vector
-        features = np.array([[
-            episodes, log_members, genre_count, popularity_score,
-            is_movie, is_long_series, is_short_series, rating_members_ratio,
-            genre_comedy, genre_action, genre_drama, genre_romance
-        ]])
-        
-        # Make prediction
-        prediction = self.best_classifier.predict(features)[0]
-        probabilities = self.best_classifier.predict_proba(features)[0]
-        confidence = max(probabilities)
-        
-        return {
-            'prediction': prediction,
-            'confidence': confidence,
-            'probabilities': dict(zip(self.best_classifier.classes_, probabilities))
-        }
+        return cluster_info
 
 # Initialize the system
 @st.cache_resource
@@ -402,7 +406,7 @@ def get_anime_system():
 
 def main():
     # Header
-    st.markdown('<div class="main-header">🎌 Enhanced Anime Recommendation System 🎌</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">🎌 Anime Recommendation System 🎌</div>', unsafe_allow_html=True)
     st.markdown("### 🤖 AI-Powered Anime Discovery Platform")
     
     # Initialize system
@@ -418,22 +422,21 @@ def main():
         # Default file path option
         use_default = st.checkbox("Use default dataset path")
         if use_default:
-            default_path = st.text_input("Dataset path:", value="anime_cleaned.csv")
+            default_path = st.text_input("Dataset path:", value="anime.csv")
         
         # Load data button
         if st.button("🔄 Load & Process Data"):
-            with st.spinner("Loading and processing data..."):
-                if uploaded_file is not None:
-                    success = anime_system.load_and_preprocess_data(uploaded_file=uploaded_file)
-                elif use_default and default_path:
-                    success = anime_system.load_and_preprocess_data(file_path=default_path)
-                else:
-                    st.error("Please upload a file or specify a path")
-                    success = False
-                
-                if success:
-                    st.session_state.data_loaded = True
-                    st.session_state.models_built = False
+            if uploaded_file is not None:
+                success = anime_system.load_and_preprocess_data(uploaded_file=uploaded_file)
+            elif use_default and default_path:
+                success = anime_system.load_and_preprocess_data(file_path=default_path)
+            else:
+                st.error("Please upload a file or specify a path")
+                success = False
+            
+            if success:
+                st.session_state.data_loaded = True
+                st.session_state.models_built = False
     
     # Check if data is loaded
     if not hasattr(st.session_state, 'data_loaded') or not st.session_state.data_loaded:
@@ -474,11 +477,11 @@ def main():
             """, unsafe_allow_html=True)
         
         with col4:
-            total_members = anime_system.processed_data['members'].sum()
+            high_rated = (anime_system.processed_data['rating'] >= 8.0).sum()
             st.markdown(f"""
             <div class="metric-card">
-                <h3>{total_members:,.0f}</h3>
-                <p>Total Members</p>
+                <h3>{high_rated:,}</h3>
+                <p>High-Rated (8.0+)</p>
             </div>
             """, unsafe_allow_html=True)
         
@@ -490,7 +493,8 @@ def main():
         with col1:
             # Rating distribution
             fig = px.histogram(anime_system.processed_data, x='rating', 
-                             title='Rating Distribution', nbins=30)
+                             title='Rating Distribution', nbins=30,
+                             color_discrete_sequence=['#FF6B6B'])
             fig.update_layout(height=400)
             st.plotly_chart(fig, use_container_width=True)
         
@@ -498,7 +502,8 @@ def main():
             # Type distribution
             type_counts = anime_system.processed_data['type'].value_counts()
             fig = px.pie(values=type_counts.values, names=type_counts.index, 
-                        title='Anime Type Distribution')
+                        title='Anime Type Distribution',
+                        color_discrete_sequence=px.colors.qualitative.Set3)
             fig.update_layout(height=400)
             st.plotly_chart(fig, use_container_width=True)
     
@@ -506,28 +511,19 @@ def main():
     st.header("🔧 AI Model Training")
     
     if st.button("🚀 Build All AI Models"):
-        with st.spinner("Building AI models... This may take a moment."):
-            progress_bar = st.progress(0)
-            
-            # Build content recommender
-            st.info("Building content-based recommender...")
-            anime_system.build_content_recommender()
-            progress_bar.progress(33)
-            
-            # Build clustering model
-            st.info("Building clustering model...")
-            optimal_k, silhouette = anime_system.build_clustering_model()
-            progress_bar.progress(66)
-            
-            # Build classification model
-            st.info("Building classification model...")
-            f1_score_val = anime_system.build_classification_model()
-            progress_bar.progress(100)
-            
-            st.session_state.models_built = True
-            st.success(f"✅ All models built successfully!")
-            st.info(f"🎯 Clustering: {optimal_k} clusters (Silhouette: {silhouette:.3f})")
-            st.info(f"📊 Classification F1-Score: {f1_score_val:.3f}")
+        progress_bar = st.progress(0)
+        
+        # Build content recommender
+        anime_system.build_content_recommender()
+        progress_bar.progress(50)
+        
+        # Build clustering model
+        optimal_k, silhouette = anime_system.build_clustering_model()
+        progress_bar.progress(100)
+        
+        st.session_state.models_built = True
+        st.balloons()
+        st.success("🎉 All AI models built successfully!")
     
     # Check if models are built
     if not hasattr(st.session_state, 'models_built') or not st.session_state.models_built:
@@ -535,7 +531,7 @@ def main():
         return
     
     # Main application tabs
-    tab1, tab2, tab3, tab4 = st.tabs(["🎯 Get Recommendations", "🔮 Predict Rating", "🔍 Explore Data", "📊 Analytics"])
+    tab1, tab2, tab3 = st.tabs(["🎯 Get Recommendations", "📊 System Statistics", "🔍 Explore Data"])
     
     with tab1:
         st.header("🎯 Anime Recommendations")
@@ -544,14 +540,14 @@ def main():
         col1, col2 = st.columns([2, 1])
         
         with col1:
-            anime_name = st.text_input("Enter anime name:", placeholder="e.g., Naruto, Attack on Titan")
+            anime_name = st.text_input("Enter anime name:", placeholder="e.g., Naruto, Attack on Titan, Death Note")
         
         with col2:
             num_recs = st.selectbox("Number of recommendations:", [5, 10, 15, 20], index=1)
         
         if st.button("🎌 Get Recommendations", key="rec_button"):
             if anime_name:
-                with st.spinner("Finding recommendations..."):
+                with st.spinner("🔄 Finding perfect recommendations for you..."):
                     recommendations, matched_anime = anime_system.get_recommendations(anime_name, num_recs)
                 
                 if recommendations is not None:
@@ -560,58 +556,78 @@ def main():
                     st.subheader("✨ Recommended Animes")
                     
                     for idx, row in recommendations.iterrows():
-                        with st.container():
-                            st.markdown(f"""
-                            <div class="recommendation-card">
-                                <h4>🎌 {row['name']}</h4>
-                                <p><strong>Genre:</strong> {row['genre']}</p>
-                                <p><strong>Rating:</strong> ⭐ {row['rating']:.2f} | 
-                                   <strong>Type:</strong> {row['type']} | 
-                                   <strong>Episodes:</strong> {row['episodes']} |
-                                   <strong>Members:</strong> {row['members']:,}</p>
-                                <p><strong>Similarity:</strong> {row['similarity']:.3f}</p>
-                            </div>
-                            """, unsafe_allow_html=True)
+                        st.markdown(f"""
+                        <div class="recommendation-card">
+                            <h4>🎌 {row['name']}</h4>
+                            <p><strong>Genre:</strong> {row['genre']}</p>
+                            <p><strong>Rating:</strong> ⭐ {row['rating']:.2f} | 
+                               <strong>Type:</strong> {row['type']} | 
+                               <strong>Episodes:</strong> {int(row['episodes'])} |
+                               <strong>Members:</strong> {int(row['members']):,}</p>
+                            <p><strong>Similarity Score:</strong> {row['similarity_score']:.3f}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    # Show summary statistics
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        avg_rating = recommendations['rating'].mean()
+                        st.metric("Average Rating", f"{avg_rating:.2f}")
+                    with col2:
+                        avg_similarity = recommendations['similarity_score'].mean()
+                        st.metric("Average Similarity", f"{avg_similarity:.3f}")
+                
                 else:
                     st.error(matched_anime)
             else:
                 st.warning("Please enter an anime name!")
     
     with tab2:
-        st.header("🔮 Anime Rating Prediction")
-        st.write("Predict the rating category for a new anime based on its characteristics!")
+        st.header("📊 System Statistics")
         
-        col1, col2 = st.columns(2)
+        # Overall statistics
+        stats = {
+            'Total Anime': f"{len(anime_system.processed_data):,}",
+            'Average Rating': f"{anime_system.processed_data['rating'].mean():.2f}",
+            'Rating Range': f"{anime_system.processed_data['rating'].min():.1f} - {anime_system.processed_data['rating'].max():.1f}",
+            'Most Popular Type': anime_system.processed_data['type'].mode().iloc[0],
+            'Average Episodes': f"{anime_system.processed_data['episodes'].mean():.1f}",
+            'High-Rated Anime (8.0+)': f"{(anime_system.processed_data['rating'] >= 8.0).sum():,}"
+        }
         
-        with col1:
-            episodes = st.number_input("Number of episodes:", min_value=1, max_value=2000, value=12)
-            members = st.number_input("Expected members:", min_value=1, max_value=10000000, value=10000)
-            genre_count = st.number_input("Number of genres:", min_value=1, max_value=20, value=3)
+        st.subheader("📈 Key Metrics")
+        for key, value in stats.items():
+            st.text(f"{key}: {value}")
         
-        with col2:
-            anime_type = st.selectbox("Anime type:", ["TV", "Movie", "OVA", "Special", "ONA"])
-            genres = st.text_input("Genres (comma-separated):", placeholder="e.g., Action, Comedy, Drama")
+        # Top genres
+        st.subheader("🏆 Top 5 Genres")
+        all_genres = []
+        for genres in anime_system.processed_data['genre'].dropna():
+            all_genres.extend([g.strip() for g in str(genres).split(',')])
         
-        if st.button("🎯 Predict Rating Category"):
-            with st.spinner("Making prediction..."):
-                result = anime_system.predict_rating_category(episodes, members, genre_count, anime_type, genres)
+        top_genres = pd.Series(all_genres).value_counts().head(5)
+        
+        # Create a bar chart for top genres
+        fig = px.bar(x=top_genres.index, y=top_genres.values, 
+                    title='Top 5 Most Popular Genres',
+                    color_discrete_sequence=['#4ECDC4'])
+        fig.update_layout(xaxis_title='Genre', yaxis_title='Count')
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Cluster analysis if available
+        if hasattr(anime_system, 'cluster_analysis'):
+            st.subheader("🎪 Cluster Analysis")
             
-            if result:
-                st.success("🎯 Prediction Results:")
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.metric("Predicted Category", result['prediction'])
-                    st.metric("Confidence", f"{result['confidence']:.1%}")
-                
-                with col2:
-                    # Probability distribution
-                    prob_df = pd.DataFrame(list(result['probabilities'].items()), 
-                                         columns=['Category', 'Probability'])
-                    fig = px.bar(prob_df, x='Category', y='Probability', 
-                               title='Category Probabilities')
-                    st.plotly_chart(fig, use_container_width=True)
+            for cluster_id, info in anime_system.cluster_analysis.items():
+                st.markdown(f"""
+                <div class="cluster-card">
+                    <h4>🎯 Cluster {cluster_id} ({info['count']} anime)</h4>
+                    <p><strong>Average Rating:</strong> {info['avg_rating']:.2f}</p>
+                    <p><strong>Average Episodes:</strong> {info['avg_episodes']:.1f}</p>
+                    <p><strong>Most Common Type:</strong> {info['most_common_type']}</p>
+                    <p><strong>Top Genres:</strong> {', '.join(info['top_genres'])}</p>
+                </div>
+                """, unsafe_allow_html=True)
     
     with tab3:
         st.header("🔍 Data Explorer")
@@ -627,12 +643,21 @@ def main():
             
             if len(matches) > 0:
                 st.write(f"Found {len(matches)} matches:")
-                st.dataframe(
-                    matches[['name', 'rating', 'type', 'episodes', 'genre', 'members']], 
-                    use_container_width=True
-                )
+                
+                # Display search results in a nice format
+                for idx, row in matches.iterrows():
+                    with st.expander(f"🎌 {row['name']} - Rating: {row['rating']:.2f}"):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.write(f"**Type:** {row['type']}")
+                            st.write(f"**Episodes:** {int(row['episodes'])}")
+                            st.write(f"**Members:** {int(row['members']):,}")
+                        with col2:
+                            st.write(f"**Genre:** {row['genre']}")
+                            if 'cluster' in row:
+                                st.write(f"**Cluster:** {int(row['cluster']) if pd.notna(row['cluster']) else 'N/A'}")
             else:
-                st.warning("No matches found.")
+                st.warning("No matches found. Try a different search term.")
         
         # Top animes by different criteria
         st.subheader("🏆 Top Animes")
@@ -641,46 +666,60 @@ def main():
         
         if criteria == "Rating":
             top_animes = anime_system.processed_data.nlargest(10, 'rating')
+            st.write("Top 10 Highest Rated Animes:")
         elif criteria == "Members":
             top_animes = anime_system.processed_data.nlargest(10, 'members')
+            st.write("Top 10 Most Popular Animes (by Members):")
         else:
             top_animes = anime_system.processed_data.nlargest(10, 'episodes')
+            st.write("Top 10 Longest Animes (by Episodes):")
         
-        st.dataframe(
-            top_animes[['name', 'rating', 'type', 'episodes', 'genre', 'members']], 
-            use_container_width=True
-        )
-    
-    with tab4:
-        st.header("📊 Advanced Analytics")
+        # Display top animes in cards
+        for idx, row in top_animes.iterrows():
+            with st.container():
+                st.markdown(f"""
+                <div class="recommendation-card">
+                    <h4>🎌 {row['name']}</h4>
+                    <p><strong>Genre:</strong> {row['genre']}</p>
+                    <p><strong>Rating:</strong> ⭐ {row['rating']:.2f} | 
+                       <strong>Type:</strong> {row['type']} | 
+                       <strong>Episodes:</strong> {int(row['episodes'])} |
+                       <strong>Members:</strong> {int(row['members']):,}</p>
+                </div>
+                """, unsafe_allow_html=True)
         
-        # Genre analysis
-        st.subheader("🎭 Genre Analysis")
-        all_genres = []
-        for genres in anime_system.processed_data['genre'].dropna():
-            all_genres.extend([g.strip() for g in str(genres).split(',')])
-        
-        genre_counts = pd.Series(all_genres).value_counts().head(10)
-        
-        fig = px.bar(x=genre_counts.index, y=genre_counts.values, 
-                    title='Top 10 Most Popular Genres')
-        fig.update_layout(xaxis_title='Genre', yaxis_title='Count')
-        st.plotly_chart(fig, use_container_width=True)
+        # Advanced analytics
+        st.subheader("📈 Advanced Analytics")
         
         # Rating vs Members scatter plot
-        st.subheader("📈 Rating vs Members Analysis")
+        st.write("**Rating vs Members Relationship**")
+        sample_size = min(1000, len(anime_system.processed_data))
+        sample_data = anime_system.processed_data.sample(sample_size)
         
-        sample_data = anime_system.processed_data.sample(min(1000, len(anime_system.processed_data)))
         fig = px.scatter(sample_data, x='members', y='rating', 
                         color='type', size='episodes',
-                        hover_data=['name'], title='Rating vs Members (Sample)')
-        fig.update_layout(xaxis_type="log")
+                        hover_data=['name'], 
+                        title=f'Rating vs Members Analysis (Sample of {sample_size})',
+                        color_discrete_sequence=px.colors.qualitative.Set3)
+        fig.update_layout(xaxis_type="log", xaxis_title="Members (log scale)", yaxis_title="Rating")
         st.plotly_chart(fig, use_container_width=True)
         
-        # Summary statistics
-        st.subheader("📋 Summary Statistics")
-        summary_stats = anime_system.processed_data[['rating', 'episodes', 'members']].describe()
-        st.dataframe(summary_stats, use_container_width=True)
+        # Episodes distribution by type
+        st.write("**Episodes Distribution by Type**")
+        fig = px.box(anime_system.processed_data, x='type', y='episodes', 
+                    title='Episodes Distribution by Anime Type',
+                    color_discrete_sequence=['#FF6B6B'])
+        fig.update_layout(yaxis_type="log", yaxis_title="Episodes (log scale)")
+        st.plotly_chart(fig, use_container_width=True)
+
+    # Footer
+    st.markdown("---")
+    st.markdown("""
+    <div style='text-align: center; color: #666; padding: 20px;'>
+        <p>🎌 <strong>Anime Recommendation System</strong> - Powered by AI & Machine Learning</p>
+        <p>Built with Streamlit, scikit-learn, and lots of ❤️ for anime!</p>
+    </div>
+    """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
